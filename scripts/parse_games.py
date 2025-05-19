@@ -30,7 +30,7 @@ def extract_game_data(game):
     board = game.board()
     moves = []
     for move in game.mainline_moves():
-        moves.append(board.san(move))
+        moves.append(board.uci(move))
         board.push(move)
 
     return {
@@ -41,6 +41,14 @@ def extract_game_data(game):
         "result": result,
         "moves": moves
     }
+
+def is_high_elo_game(game, min_elo=1800):
+    try:
+        white_elo = int(game.headers.get("WhiteElo", 0))
+        black_elo = int(game.headers.get("BlackElo", 0))
+        return white_elo >= min_elo and black_elo >= min_elo
+    except ValueError:
+        return False
 
 if __name__ == "__main__":
     path_to_zst = "data/raw/lichess_db_standard_rated_2025-04.pgn.zst"  # anpassen
@@ -59,18 +67,20 @@ if __name__ == "__main__":
 
     with open(output_path, "w", encoding="utf-8") as f_out:
         count = 0
+        skipped = 0
         for game in stream_games_from_zst(path_to_zst):
-            data = extract_game_data(game)
 
-            try:
-                if int(data["white_elo"]) < 1800 or int(data["black_elo"]) < 1800:
-                    continue
-            except (TypeError, ValueError):
+            if not is_high_elo_game(game):
+                skipped += 1
                 continue
+
+
+            data = extract_game_data(game)
 
             f_out.write(json.dumps(data) + "\n")
             count += 1
             if count % 1000 == 0:
                 print(f"{count} Spiele gespeichert...")
+                print(f"⏭️  {skipped} Spiele übersprungen (Elo < 1800).")
 
     print(f"✅ Fertig: {count} Spiele gespeichert in {output_path}")
